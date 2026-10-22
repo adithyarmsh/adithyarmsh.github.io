@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en" data-theme="dusk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Hub">
+<title>Home Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: landscape = big clock/date on the left, weather card pinned top-right, rotating card below it.
+   Portrait = everything stacked. Clock, date and weather never move; only the lower card rotates. */
+:root, [data-theme="dusk"] {
+  --bg:#14121f; --surface:#1e1b30; --line:#2d2945; --fg:#f2effc; --muted:#9d97ba;
+  --accent:#ffb35c; --up:#6fd6a0; --down:#ff8a7a;
+}
+[data-theme="daylight"] {
+  --bg:#eceff4; --surface:#ffffff; --line:#d9dfe8; --fg:#121c2b; --muted:#5a6a7e;
+  --accent:#1f5fd6; --up:#12805a; --down:#c43a2c;
+}
+[data-theme="moss"] {
+  --bg:#0e1913; --surface:#16251c; --line:#233829; --fg:#e7f0e8; --muted:#8ea796;
+  --accent:#e9c46a; --up:#7ddc9a; --down:#ff9a85;
+}
+[data-theme="graphite"] {
+  --bg:#0f0f10; --surface:#19191b; --line:#2a2a2d; --fg:#f3f3f4; --muted:#8d8d93;
+  --accent:#ff6f5e; --up:#6fd6a0; --down:#ff8a7a;
+}
+:root {
+  --display:'Bricolage Grotesque',-apple-system,'Helvetica Neue',Arial,sans-serif;
+  --body:'Instrument Sans',-apple-system,'Helvetica Neue',Arial,sans-serif;
+}
+* { box-sizing:border-box; }
+html, body { margin:0; height:100%; }
+body {
+  background:var(--bg); color:var(--fg); font-family:var(--body);
+  overflow:hidden; -webkit-user-select:none; user-select:none;
+  -webkit-tap-highlight-color:transparent; -webkit-text-size-adjust:100%;
+}
+[hidden] { display:none !important; }
+
+.stage {
+  position:fixed; top:0; right:0; bottom:0; left:0;
+  padding:max(30px, env(safe-area-inset-top)) max(34px, env(safe-area-inset-right)) max(30px, env(safe-area-inset-bottom)) max(34px, env(safe-area-inset-left));
+  display:grid; grid-template-columns:1fr 1fr; gap:30px;
+}
+.left { display:flex; flex-direction:column; justify-content:center; min-width:0; }
+.right { display:grid; grid-template-rows:auto 1fr; gap:20px; min-width:0; min-height:0; }
+
+.time {
+  font-family:var(--display); font-weight:300; line-height:.92; letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums; white-space:nowrap; font-size:16vw;
+  display:flex; align-items:baseline;
+}
+.time .ampm { font-size:.14em; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); font-weight:600; margin-left:.35em; }
+.time .sec { font-size:.14em; color:var(--muted); margin-left:.5em; letter-spacing:0; }
+.weekday { font-family:var(--display); font-weight:600; font-size:6vw; letter-spacing:-.02em; margin-top:2.4vw; line-height:1; }
+.datefull { font-size:3vw; color:var(--muted); margin-top:1vw; font-weight:500; }
+.datefull b { color:var(--accent); font-weight:600; }
+
+.card { background:var(--surface); border:1px solid var(--line); border-radius:22px; padding:24px 28px; min-width:0; }
+
+/* weather */
+.w-main { display:flex; align-items:center; gap:16px; }
+.w-icon { width:72px; height:72px; color:var(--accent); flex:none; }
+.w-icon svg { width:100%; height:100%; display:block; }
+.w-temp { font-family:var(--display); font-weight:300; font-size:76px; line-height:1; letter-spacing:-.03em; }
+.w-temp sup { font-size:.4em; vertical-align:top; position:relative; top:.15em; color:var(--muted); }
+.w-cond { font-size:22px; font-weight:600; line-height:1.2; }
+.w-sub { color:var(--muted); font-size:15px; margin-top:3px; white-space:nowrap; }
+.stats { display:flex; flex-wrap:wrap; gap:8px 20px; margin-top:16px; color:var(--muted); font-size:16px; }
+.stats b { color:var(--fg); font-weight:600; }
+.hours { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-top:16px; padding-top:14px; border-top:1px solid var(--line); text-align:center; }
+.hours .h-t { color:var(--muted); font-size:14px; }
+.hours .h-i { width:30px; height:30px; margin:6px auto 4px; color:var(--fg); }
+.hours .h-i svg { width:100%; height:100%; display:block; }
+.hours .h-d { font-size:19px; font-weight:600; }
+.hours .h-r { font-size:13px; color:var(--muted); height:16px; }
+.hours .h-r.wet { color:var(--accent); font-weight:600; }
+.w-empty { color:var(--muted); font-size:18px; }
+.w-note { color:var(--muted); font-size:13px; margin-top:10px; }
+
+/* rotating card */
+.rot { display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+.rot-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.rot-label { font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); font-weight:600; }
+.rot-label span { color:var(--muted); font-weight:500; margin-left:8px; letter-spacing:.06em; }
+.dots { display:flex; gap:7px; }
+.dots i { width:8px; height:8px; border-radius:50%; background:var(--line); display:block; transition:background .4s; }
+.dots i.on { background:var(--accent); }
+.slides { position:relative; flex:1; min-height:0; overflow:hidden; }
+.slide { position:absolute; top:0; left:0; right:0; opacity:0; transition:opacity .7s ease; pointer-events:none; }
+.slide.on { opacity:1; }
+.item { padding:11px 0; border-bottom:1px solid var(--line); font-size:19px; line-height:1.3; font-weight:500; }
+.item:last-child { border-bottom:0; }
+.item .t { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.item small { display:block; color:var(--muted); font-size:13px; margin-top:3px; font-weight:400; }
+.mk { display:grid; grid-template-columns:1fr auto auto; gap:6px 18px; align-items:baseline; padding:12px 0; border-bottom:1px solid var(--line); }
+.mk:last-child { border-bottom:0; }
+.mk .n { font-size:18px; color:var(--muted); }
+.mk .p { font-family:var(--display); font-size:28px; font-weight:500; font-variant-numeric:tabular-nums; text-align:right; }
+.mk .c { font-size:16px; font-weight:600; min-width:92px; text-align:right; font-variant-numeric:tabular-nums; }
+.mk .c.up { color:var(--up); } .mk .c.down { color:var(--down); }
+.empty { color:var(--muted); font-size:17px; padding:14px 0; }
+.prog { height:3px; background:var(--line); border-radius:2px; overflow:hidden; margin-top:12px; }
+.prog i { display:block; height:100%; background:var(--accent); transform-origin:left center; transform:scaleX(0); }
+.prog i.run { animation-name:fill; animation-timing-function:linear; animation-fill-mode:forwards; }
+@keyframes fill { from { transform:scaleX(0); } to { transform:scaleX(1); } }
+
+/* night dimming + settings */
+.dim { position:fixed; top:0; right:0; bottom:0; left:0; background:#000; opacity:0; pointer-events:none; transition:opacity 3s; z-index:5; }
+.gear { position:fixed; right:max(12px, env(safe-area-inset-right)); bottom:max(12px, env(safe-area-inset-bottom)); width:48px; height:48px; border-radius:50%; border:0; background:transparent; color:var(--muted); opacity:.35; z-index:20; padding:12px; }
+.gear svg { width:100%; height:100%; display:block; }
+.panel { position:fixed; top:0; right:0; bottom:0; left:0; background:rgba(0,0,0,.6); z-index:30; display:flex; align-items:center; justify-content:center; padding:16px; }
+.sheet { width:min(660px, 100%); max-height:100%; overflow:auto; -webkit-overflow-scrolling:touch; background:var(--surface); border:1px solid var(--line); border-radius:24px; padding:24px 26px; -webkit-user-select:text; user-select:text; }
+.sheet h2 { font-family:var(--display); font-size:28px; font-weight:600; margin:0 0 4px; }
+.row { padding:14px 0; border-top:1px solid var(--line); }
+.row:first-of-type { border-top:0; }
+.row > label, .row > .lab { display:block; font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:600; margin-bottom:10px; }
+.chips { display:flex; flex-wrap:wrap; gap:8px; }
+.chip { font:inherit; font-size:16px; font-weight:500; color:var(--fg); background:transparent; border:1px solid var(--line); border-radius:999px; padding:10px 16px; min-height:44px; display:inline-flex; align-items:center; gap:8px; }
+.chip[aria-pressed="true"] { background:var(--accent); color:var(--bg); border-color:var(--accent); }
+.chip .sw { width:14px; height:14px; border-radius:50%; display:inline-block; border:1px solid rgba(128,128,128,.5); }
+.field { display:flex; gap:8px; }
+.field input { flex:1; min-width:0; font:inherit; font-size:17px; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:0 14px; min-height:46px; -webkit-appearance:none; appearance:none; }
+.hint { color:var(--muted); font-size:14px; margin-top:8px; }
+.res { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+.res .chip { border-radius:12px; justify-content:flex-start; }
+.done { margin-top:8px; width:100%; justify-content:center; background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:600; }
+
+@media (orientation:portrait) {
+  .stage { grid-template-columns:1fr; grid-template-rows:auto auto minmax(0,1fr); gap:22px; }
+  .left { justify-content:flex-start; }
+  .time { font-size:24vw; }
+  .weekday { font-size:8vw; margin-top:3vw; }
+  .datefull { font-size:4.2vw; }
+  .right { display:contents; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .slide, .dim, .dots i { transition:none; }
+}
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <section class="left" aria-label="Time and date">
+    <div class="time" id="time"></div>
+    <div class="weekday" id="weekday"></div>
+    <div class="datefull" id="datefull"></div>
+  </section>
+  <section class="right">
+    <div class="card" id="weather"><div class="w-empty">Loading weather…</div></div>
+    <div class="card rot" id="rot">
+      <div class="rot-head">
+        <div class="rot-label" id="rotLabel"></div>
+        <div class="dots" id="dots"></div>
+      </div>
+      <div class="slides" id="slides"><div class="empty">Loading headlines…</div></div>
+      <div class="prog"><i id="prog"></i></div>
+    </div>
+  </section>
+</div>
+<div class="dim" id="dim"></div>
+
+<button class="gear" id="gear" aria-label="Open settings">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+</button>
+
+<div class="panel" id="panel" hidden>
+  <div class="sheet" role="dialog" aria-label="Settings">
+    <h2>Settings</h2>
+    <div class="row"><div class="lab">Look</div><div class="chips" id="cThemes"></div></div>
+    <div class="row"><div class="lab">Clock</div><div class="chips" id="cClock"></div></div>
+    <div class="row">
+      <label for="placeIn">Place</label>
+      <div class="field"><input id="placeIn" type="text" placeholder="City, area or 6-digit PIN code" autocomplete="off" autocorrect="off" autocapitalize="off"><button class="chip" id="placeGo" type="button">Find</button></div>
+      <div class="hint" id="placeNow"></div>
+      <div class="res" id="placeRes"></div>
+    </div>
+    <div class="row"><div class="lab">Rotating card shows</div><div class="chips" id="cCards"></div></div>
+    <div class="row"><div class="lab">Change card every</div><div class="chips" id="cRotate"></div></div>
+    <button class="chip done" id="done" type="button">Done</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var KEY = 'hub.settings.v1';
+  var DEMO = /[?&]demo\b/.test(location.search);
+  var THEMES = [
+    { id: 'dusk', name: 'Dusk', sw: '#ffb35c' },
+    { id: 'daylight', name: 'Daylight', sw: '#1f5fd6' },
+    { id: 'moss', name: 'Moss', sw: '#e9c46a' },
+    { id: 'graphite', name: 'Graphite', sw: '#ff6f5e' }
+  ];
+  var DEFAULTS = {
+    theme: 'dusk', h24: false, seconds: false, dim: true, rotate: 12,
+    place: 'Bengaluru', admin: 'Karnataka', lat: 12.9716, lon: 77.5946, tz: 'Asia/Kolkata',
+    cards: { news: true, cricket: true, markets: true }
+  };
+  var S = loadSettings();
+  var DATA = { news: null, cricket: null, markets: null };
+  var WX = null;
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  function loadSettings() {
+    var s = JSON.parse(JSON.stringify(DEFAULTS));
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (raw) {
+        var o = JSON.parse(raw), k;
+        for (k in o) { if (k !== 'cards') { s[k] = o[k]; } }
+        if (o.cards) { for (k in o.cards) { s.cards[k] = o.cards[k]; } }
+      }
+    } catch (e) {}
+    return s;
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+
+  function getJSON(url, ms) {
+    return new Promise(function (resolve, reject) {
+      var done = false;
+      var t = setTimeout(function () { if (!done) { done = true; reject(new Error('timeout')); } }, ms || 12000);
+      fetch(url).then(function (r) {
+        if (!r.ok) { throw new Error('http ' + r.status); }
+        return r.json();
+      }).then(function (j) {
+        if (!done) { done = true; clearTimeout(t); resolve(j); }
+      }).catch(function (e) {
+        if (!done) { done = true; clearTimeout(t); reject(e); }
+      });
+    });
+  }
+
+  /* ---------- clock + date ---------- */
+  var fmtTime, fmtDate, fmtHour;
+  function buildFormatters() {
+    try {
+      fmtTime = new Intl.DateTimeFormat('en-IN', { hour: S.h24 ? '2-digit' : 'numeric', minute: '2-digit', second: '2-digit', hourCycle: S.h24 ? 'h23' : 'h12', timeZone: S.tz });
+      fmtDate = new Intl.DateTimeFormat('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: S.tz });
+      fmtHour = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hourCycle: 'h23', timeZone: S.tz });
+    } catch (e) {
+      S.tz = 'Asia/Kolkata';
+      fmtTime = new Intl.DateTimeFormat('en-IN', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: !S.h24 });
+      fmtDate = new Intl.DateTimeFormat('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      fmtHour = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false });
+    }
+  }
+  function partsOf(fmt, d) {
+    var out = {}, p = fmt.formatToParts(d), i;
+    for (i = 0; i < p.length; i++) { out[p[i].type] = p[i].value; }
+    return out;
+  }
+  var lastDate = '';
+  function tick() {
+    var now = new Date();
+    var t = partsOf(fmtTime, now);
+    var html = '<span>' + esc(t.hour) + ':' + esc(t.minute) + '</span>';
+    if (!S.h24 && t.dayPeriod) { html += '<span class="ampm">' + esc(t.dayPeriod) + '</span>'; }
+    if (S.seconds) { html += '<span class="sec">' + esc(t.second) + '</span>'; }
+    $('time').innerHTML = html;
+
+    var d = partsOf(fmtDate, now);
+    var key = d.weekday + d.day + d.month + d.year;
+    if (key !== lastDate) {
+      lastDate = key;
+      $('weekday').textContent = d.weekday;
+      $('datefull').innerHTML = esc(d.day) + ' <b>' + esc(d.month) + '</b> ' + esc(d.year);
+    }
+    var hh = parseInt(fmtHour.format(now), 10);
+    $('dim').style.opacity = (S.dim && (hh >= 23 || hh < 6)) ? '0.55' : '0';
+    setTimeout(tick, 1000 - (now.getMilliseconds()) + 15);
+  }
+
+  /* ---------- weather ---------- */
+  var CLOUD = '<path d="M18 40h27a9 9 0 0 0 1.5-17.9A13 13 0 0 0 21.5 19 10.5 10.5 0 0 0 18 40z"/>';
+  var SUN = '<circle cx="32" cy="32" r="9"/><path d="M32 10v6M32 48v6M10 32h6M48 32h6M16.5 16.5l4.2 4.2M43.3 43.3l4.2 4.2M16.5 47.5l4.2-4.2M43.3 20.7l4.2-4.2"/>';
+  var MOON = '<path d="M42 41A17 17 0 0 1 25 14a17 17 0 1 0 17 27z"/>';
+  function svg(inner) { return '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + inner + '</svg>'; }
+  function wxKind(c) {
+    if (c === 0) { return 'clear'; }
+    if (c === 1 || c === 2) { return 'partly'; }
+    if (c === 3) { return 'cloud'; }
+    if (c === 45 || c === 48) { return 'fog'; }
+    if (c >= 51 && c <= 57) { return 'drizzle'; }
+    if ((c >= 61 && c <= 67) || (c >= 80 && c <= 82)) { return 'rain'; }
+    if ((c >= 71 && c <= 77) || c === 85 || c === 86) { return 'snow'; }
+    if (c >= 95) { return 'storm'; }
+    return 'cloud';
+  }
+  var WXTEXT = { clear: 'Clear', partly: 'Partly cloudy', cloud: 'Cloudy', fog: 'Fog', drizzle: 'Drizzle', rain: 'Rain', snow: 'Snow', storm: 'Thunderstorm' };
+  function wxIcon(code, day) {
+    var k = wxKind(code);
+    if (k === 'clear') { return svg(day ? SUN : MOON); }
+    if (k === 'partly') {
+      return svg(day ? '<circle cx="22" cy="22" r="7"/><path d="M22 7v3M7 22h3M11.5 11.5l2.1 2.1M32.5 11.5l-2.1 2.1"/><g transform="translate(6 6)">' + CLOUD + '</g>'
+                     : '<g transform="translate(-4 -6) scale(.7)">' + MOON + '</g><g transform="translate(6 6)">' + CLOUD + '</g>');
+    }
+    if (k === 'cloud') { return svg('<g transform="translate(0 4)">' + CLOUD + '</g>'); }
+    if (k === 'fog') { return svg('<path d="M14 24h36M10 33h40M16 42h32M12 51h36"/>'); }
+    if (k === 'drizzle') { return svg(CLOUD + '<path d="M24 47v4M34 47v4M44 47v4"/>'); }
+    if (k === 'rain') { return svg(CLOUD + '<path d="M25 46l-3 9M35 46l-3 9M45 46l-3 9"/>'); }
+    if (k === 'snow') { return svg(CLOUD + '<path d="M24 48v.01M34 52v.01M44 48v.01M29 57v.01M39 57v.01" stroke-width="5"/>'); }
+    return svg(CLOUD + '<path d="M35 42l-8 10h8l-5 9"/>');
+  }
+  function hourLabel(iso) {
+    var h = parseInt(iso.substr(11, 2), 10);
+    if (S.h24) { return pad2(h) + ':00'; }
+    return (h % 12 || 12) + (h < 12 ? ' am' : ' pm');
+  }
+  function hmLabel(iso) {
+    var h = parseInt(iso.substr(11, 2), 10), m = iso.substr(14, 2);
+    if (S.h24) { return pad2(h) + ':' + m; }
+    return (h % 12 || 12) + ':' + m + (h < 12 ? ' am' : ' pm');
+  }
+  function aqiBand(v) {
+    if (v <= 50) { return 'Good'; }
+    if (v <= 100) { return 'Moderate'; }
+    if (v <= 150) { return 'Unhealthy for some'; }
+    if (v <= 200) { return 'Unhealthy'; }
+    if (v <= 300) { return 'Very unhealthy'; }
+    return 'Hazardous';
+  }
+  function renderWeather(w, offline) {
+    if (!w) { return; }
+    var kind = wxKind(w.code);
+    var h = '<div class="w-main"><div class="w-icon">' + wxIcon(w.code, w.day) + '</div>' +
+      '<div class="w-temp">' + Math.round(w.temp) + '<sup>°C</sup></div>' +
+      '<div><div class="w-cond">' + esc(WXTEXT[kind]) + '</div>' +
+      '<div class="w-sub">' + esc(S.place) + '</div>' +
+      '<div class="w-sub">Feels ' + Math.round(w.feels) + '° · H ' + Math.round(w.hi) + '° L ' + Math.round(w.lo) + '°</div></div></div>';
+    h += '<div class="stats"><span><b>' + Math.round(w.hum) + '%</b> humidity</span><span><b>' + Math.round(w.wind) + '</b> km/h wind</span>';
+    if (w.rainMax !== null && w.rainMax !== undefined) { h += '<span><b>' + Math.round(w.rainMax) + '%</b> rain today</span>'; }
+    if (w.aqi !== null && w.aqi !== undefined) { h += '<span>AQI <b>' + Math.round(w.aqi) + '</b> ' + esc(aqiBand(w.aqi)) + '</span>'; }
+    h += '<span>Sunrise <b>' + esc(hmLabel(w.sunrise)) + '</b></span><span>Sunset <b>' + esc(hmLabel(w.sunset)) + '</b></span></div>';
+    h += '<div class="hours">';
+    var i;
+    for (i = 0; i < w.hours.length; i++) {
+      var x = w.hours[i];
+      var wet = x.rain >= 30;
+      h += '<div><div class="h-t">' + esc(hourLabel(x.time)) + '</div><div class="h-i">' + wxIcon(x.code, x.day) + '</div>' +
+        '<div class="h-d">' + Math.round(x.temp) + '°</div><div class="h-r' + (wet ? ' wet' : '') + '">' + (x.rain > 0 ? Math.round(x.rain) + '%' : '') + '</div></div>';
+    }
+    h += '</div>';
+    if (offline) { h += '<div class="w-note">Showing the last update. Trying again soon.</div>'; }
+    $('weather').innerHTML = h;
+  }
+  function demoWeather() {
+    var hrs = [], i, codes = [2, 3, 61, 61, 2];
+    for (i = 0; i < 5; i++) { hrs.push({ time: '2026-10-22T' + pad2(20 + i * 2 - (i > 1 ? 24 : 0)) + ':00', temp: 27 - i, code: codes[i], rain: [5, 20, 55, 40, 10][i], day: false }); }
+    return { temp: 28.6, feels: 31, hum: 68, wind: 11, code: 2, day: true, hi: 31, lo: 21, rainMax: 40, aqi: 78,
+      sunrise: '2026-10-22T06:08', sunset: '2026-10-22T17:54', hours: hrs };
+  }
+  function loadWeather() {
+    if (DEMO) { WX = demoWeather(); renderWeather(WX); return; }
+    var tz = encodeURIComponent(S.tz);
+    var u1 = 'https://api.open-meteo.com/v1/forecast?latitude=' + S.lat + '&longitude=' + S.lon +
+      '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day' +
+      '&hourly=temperature_2m,precipitation_probability,weather_code,is_day' +
+      '&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max&forecast_days=2&timezone=' + tz;
+    var u2 = 'https://air-quality-api.open-meteo.com/v1/air-quality?latitude=' + S.lat + '&longitude=' + S.lon + '&current=us_aqi&timezone=' + tz;
+    var aqiP = getJSON(u2).then(function (j) { return j && j.current ? j.current.us_aqi : null; }, function () { return null; });
+    Promise.all([getJSON(u1), aqiP]).then(function (r) {
+      var j = r[0], c = j.current, hh = j.hourly, d = j.daily, i, start = 0;
+      for (i = 0; i < hh.time.length; i++) { if (hh.time[i] > c.time) { start = i; break; } }
+      var hrs = [];
+      for (i = start; i < hh.time.length && hrs.length < 5; i += 2) {
+        hrs.push({ time: hh.time[i], temp: hh.temperature_2m[i], code: hh.weather_code[i], rain: hh.precipitation_probability[i] || 0, day: hh.is_day[i] === 1 });
+      }
+      WX = { temp: c.temperature_2m, feels: c.apparent_temperature, hum: c.relative_humidity_2m, wind: c.wind_speed_10m,
+        code: c.weather_code, day: c.is_day === 1, hi: d.temperature_2m_max[0], lo: d.temperature_2m_min[0],
+        rainMax: d.precipitation_probability_max ? d.precipitation_probability_max[0] : null, aqi: r[1],
+        sunrise: d.sunrise[0], sunset: d.sunset[0], hours: hrs };
+      renderWeather(WX);
+      setTimeout(loadWeather, 15 * 60 * 1000);
+    }).catch(function () {
+      if (WX) { renderWeather(WX, true); } else { $('weather').innerHTML = '<div class="w-empty">Weather is unavailable right now. Retrying.</div>'; }
+      setTimeout(loadWeather, 2 * 60 * 1000);
+    });
+  }
+
+  /* ---------- rotating card data ---------- */
+  var FEEDS = {
+    news: 'https://www.thehindu.com/news/national/feeder/default.rss',
+    cricket: 'https://www.thehindu.com/sport/cricket/feeder/default.rss'
+  };
+  var SYMS = [
+    { s: '^NSEI', name: 'Nifty 50', dec: 2 },
+    { s: '^BSESN', name: 'Sensex', dec: 2 },
+    { s: 'INR=X', name: 'US dollar in rupees', dec: 2 },
+    { s: 'GC=F', name: 'Gold (USD/oz)', dec: 1 }
+  ];
+  function ago(s) {
+    if (!s) { return ''; }
+    var t = Date.parse(String(s).replace(' ', 'T') + 'Z');
+    if (isNaN(t)) { return ''; }
+    var m = Math.round((Date.now() - t) / 60000);
+    if (m < 1) { return 'just now'; }
+    if (m < 60) { return m + ' min ago'; }
+    if (m < 1440) { return Math.round(m / 60) + ' h ago'; }
+    return Math.round(m / 1440) + ' d ago';
+  }
+  function loadFeed(key) {
+    if (DEMO) {
+      DATA[key] = key === 'news'
+        ? [{ t: 'Sample headline: monsoon withdrawal expected to complete this week', a: '1 h ago' }, { t: 'Sample headline: city metro extension opens to passengers', a: '2 h ago' }, { t: 'Sample headline: new rules for school bus safety announced', a: '3 h ago' }, { t: 'Sample headline: fuel prices unchanged for another week', a: '5 h ago' }]
+        : [{ t: 'Sample headline: India name unchanged squad for the next Test', a: '40 min ago' }, { t: 'Sample headline: spinners dominate day two on a turning pitch', a: '2 h ago' }, { t: 'Sample headline: women’s team begins camp ahead of the tour', a: '4 h ago' }, { t: 'Sample headline: IPL retention talks heat up', a: '6 h ago' }];
+      buildSlides(); return;
+    }
+    getJSON('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(FEEDS[key])).then(function (j) {
+      if (!j || j.status !== 'ok' || !j.items || !j.items.length) { throw new Error('empty'); }
+      var out = [], i;
+      for (i = 0; i < j.items.length && out.length < 4; i++) { out.push({ t: j.items[i].title, a: ago(j.items[i].pubDate) }); }
+      DATA[key] = out; buildSlides();
+    }).catch(function () { /* keep the old data, or skip the card if there is none */ });
+  }
+  function fmtNum(n, dec) { try { return n.toLocaleString('en-IN', { minimumFractionDigits: dec, maximumFractionDigits: dec }); } catch (e) { return n.toFixed(dec); } }
+  function loadMarkets() {
+    if (DEMO) {
+      DATA.markets = [{ name: 'Nifty 50', p: fmtNum(24812.35, 2), ch: 0.42 }, { name: 'Sensex', p: fmtNum(81240.1, 2), ch: 0.38 }, { name: 'US dollar in rupees', p: fmtNum(88.42, 2), ch: -0.12 }, { name: 'Gold (USD/oz)', p: fmtNum(2712.4, 1), ch: 0.8 }];
+      buildSlides(); return;
+    }
+    var jobs = SYMS.map(function (x) {
+      return getJSON('https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(x.s) + '?range=1d&interval=15m').then(function (j) {
+        var m = j.chart.result[0].meta, prev = m.chartPreviousClose || m.previousClose;
+        return { name: x.name, p: fmtNum(m.regularMarketPrice, x.dec), ch: prev ? (m.regularMarketPrice - prev) / prev * 100 : 0 };
+      }).catch(function () { return null; });
+    });
+    Promise.all(jobs).then(function (r) {
+      var ok = r.filter(function (x) { return x; });
+      if (ok.length) { DATA.markets = ok; buildSlides(); }
+    });
+  }
+
+  /* ---------- rotator ---------- */
+  var slides = [], cur = -1, rotTimer = null;
+  function listHTML(items) {
+    var h = '', i;
+    for (i = 0; i < items.length; i++) { h += '<div class="item"><div class="t">' + esc(items[i].t) + '</div>' + (items[i].a ? '<small>' + esc(items[i].a) + '</small>' : '') + '</div>'; }
+    return h;
+  }
+  function marketHTML(rows) {
+    var h = '', i;
+    for (i = 0; i < rows.length; i++) {
+      var r = rows[i], up = r.ch >= 0;
+      h += '<div class="mk"><div class="n">' + esc(r.name) + '</div><div class="p">' + esc(r.p) + '</div><div class="c ' + (up ? 'up' : 'down') + '">' + (up ? '▲ ' : '▼ ') + Math.abs(r.ch).toFixed(2) + '%</div></div>';
+    }
+    return h;
+  }
+  function buildSlides() {
+    var keep = slides[cur] ? slides[cur].key : null, list = [];
+    if (S.cards.news && DATA.news) { list.push({ key: 'news', label: 'Headlines', sub: DEMO ? 'Sample' : 'The Hindu', html: listHTML(DATA.news) }); }
+    if (S.cards.cricket && DATA.cricket) { list.push({ key: 'cricket', label: 'Cricket', sub: DEMO ? 'Sample' : 'The Hindu', html: listHTML(DATA.cricket) }); }
+    if (S.cards.markets && DATA.markets) { list.push({ key: 'markets', label: 'Markets', sub: DEMO ? 'Sample' : 'Yahoo Finance', html: marketHTML(DATA.markets) }); }
+    slides = list;
+    var box = $('slides'), h = '', dots = '', i;
+    if (!list.length) {
+      box.innerHTML = '<div class="empty">' + (S.cards.news || S.cards.cricket || S.cards.markets ? 'Loading headlines…' : 'All rotating cards are turned off.') + '</div>';
+      $('dots').innerHTML = ''; $('rotLabel').textContent = ''; $('prog').className = '';
+      clearTimeout(rotTimer); cur = -1; return;
+    }
+    for (i = 0; i < list.length; i++) { h += '<div class="slide" id="s' + i + '">' + list[i].html + '</div>'; dots += '<i></i>'; }
+    box.innerHTML = h; $('dots').innerHTML = dots;
+    var idx = 0;
+    for (i = 0; i < list.length; i++) { if (list[i].key === keep) { idx = i; } }
+    show(idx);
+  }
+  function fitSlide(i) {
+    var box = $('slides'), el = $('s' + i), rows, k, limit = box.clientHeight;
+    if (!el) { return; }
+    rows = el.children;
+    for (k = 0; k < rows.length; k++) { rows[k].style.display = ''; }
+    for (k = 0; k < rows.length; k++) {
+      if (rows[k].offsetTop + rows[k].offsetHeight > limit + 1 && k > 0) { rows[k].style.display = 'none'; }
+    }
+  }
+  function show(i) {
+    clearTimeout(rotTimer);
+    cur = i;
+    var k, ds = $('dots').children;
+    for (k = 0; k < slides.length; k++) {
+      $('s' + k).className = 'slide' + (k === i ? ' on' : '');
+      ds[k].className = k === i ? 'on' : '';
+    }
+    $('rotLabel').innerHTML = esc(slides[i].label) + '<span>' + esc(slides[i].sub) + '</span>';
+    fitSlide(i);
+    var p = $('prog');
+    p.className = ''; void p.offsetWidth;
+    if (slides.length > 1) {
+      p.style.animationDuration = S.rotate + 's'; p.className = 'run';
+      rotTimer = setTimeout(function () { show((cur + 1) % slides.length); }, S.rotate * 1000);
+    }
+  }
+
+  /* ---------- settings ---------- */
+  function chips(id, opts, isOn, pick) {
+    var box = $(id);
+    function draw() {
+      var h = '', i;
+      for (i = 0; i < opts.length; i++) {
+        h += '<button type="button" class="chip" data-i="' + i + '" aria-pressed="' + (isOn(opts[i]) ? 'true' : 'false') + '">' + (opts[i].sw ? '<span class="sw" style="background:' + opts[i].sw + '"></span>' : '') + esc(opts[i].name) + '</button>';
+      }
+      box.innerHTML = h;
+    }
+    box.addEventListener('click', function (e) {
+      var b = e.target; while (b && b !== box && !b.getAttribute('data-i')) { b = b.parentNode; }
+      if (!b || b === box) { return; }
+      pick(opts[parseInt(b.getAttribute('data-i'), 10)]); save(); draw();
+    });
+    draw();
+  }
+  function setupSettings() {
+    chips('cThemes', THEMES, function (o) { return S.theme === o.id; }, function (o) { S.theme = o.id; document.documentElement.setAttribute('data-theme', o.id); });
+    var clockOpts = [
+      { name: '12-hour', f: 'h24', v: false }, { name: '24-hour', f: 'h24', v: true },
+      { name: 'Seconds on', f: 'seconds', v: true }, { name: 'Seconds off', f: 'seconds', v: false },
+      { name: 'Dim at night', f: 'dim', v: true }, { name: 'Never dim', f: 'dim', v: false }
+    ];
+    chips('cClock', clockOpts, function (o) { return S[o.f] === o.v; }, function (o) { S[o.f] = o.v; buildFormatters(); lastDate = ''; if (WX) { renderWeather(WX); } });
+    var cardOpts = [{ name: 'Headlines', k: 'news' }, { name: 'Cricket', k: 'cricket' }, { name: 'Markets', k: 'markets' }];
+    chips('cCards', cardOpts, function (o) { return S.cards[o.k]; }, function (o) { S.cards[o.k] = !S.cards[o.k]; buildSlides(); });
+    var rotOpts = [{ name: '8 seconds', v: 8 }, { name: '12 seconds', v: 12 }, { name: '20 seconds', v: 20 }];
+    chips('cRotate', rotOpts, function (o) { return S.rotate === o.v; }, function (o) { S.rotate = o.v; if (slides.length) { show(cur < 0 ? 0 : cur); } });
+
+    $('gear').addEventListener('click', function () { $('placeNow').textContent = 'Now showing: ' + S.place + (S.admin ? ', ' + S.admin : ''); $('placeRes').innerHTML = ''; $('panel').hidden = false; });
+    $('done').addEventListener('click', function () { $('panel').hidden = true; });
+    $('panel').addEventListener('click', function (e) { if (e.target === $('panel')) { $('panel').hidden = true; } });
+    $('placeGo').addEventListener('click', findPlace);
+    $('placeIn').addEventListener('keydown', function (e) { if (e.key === 'Enter') { findPlace(); } });
+  }
+  function geocode(name) {
+    return getJSON('https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(name) + '&count=5&language=en&format=json').then(function (j) { return j.results || []; });
+  }
+  function findPlace() {
+    var q = $('placeIn').value.replace(/^\s+|\s+$/g, ''), res = $('placeRes');
+    if (!q) { return; }
+    res.innerHTML = '<div class="hint">Searching…</div>';
+    var lookup;
+    if (/^\d{6}$/.test(q)) {
+      lookup = getJSON('https://api.postalpincode.in/pincode/' + q).then(function (j) {
+        var po = j && j[0] && j[0].PostOffice && j[0].PostOffice[0];
+        if (!po) { return []; }
+        return geocode(po.Name).then(function (r) { return r.length ? r : geocode(po.District); });
+      });
+    } else { lookup = geocode(q); }
+    lookup.then(function (rs) {
+      if (!rs.length) { res.innerHTML = '<div class="hint">Nothing found. Try the city name instead.</div>'; return; }
+      var h = '', i;
+      for (i = 0; i < rs.length; i++) { h += '<button type="button" class="chip" data-i="' + i + '">' + esc(rs[i].name + (rs[i].admin1 ? ', ' + rs[i].admin1 : '') + (rs[i].country ? ', ' + rs[i].country : '')) + '</button>'; }
+      res.innerHTML = h;
+      res.onclick = function (e) {
+        var b = e.target; while (b && b !== res && !b.getAttribute('data-i')) { b = b.parentNode; }
+        if (!b || b === res) { return; }
+        var r = rs[parseInt(b.getAttribute('data-i'), 10)];
+        S.place = r.name; S.admin = r.admin1 || ''; S.lat = r.latitude; S.lon = r.longitude; S.tz = r.timezone || S.tz;
+        save(); buildFormatters(); lastDate = ''; WX = null;
+        $('weather').innerHTML = '<div class="w-empty">Loading weather…</div>';
+        loadWeather(); $('placeNow').textContent = 'Now showing: ' + S.place + (S.admin ? ', ' + S.admin : ''); res.innerHTML = '';
+      };
+    }).catch(function () { res.innerHTML = '<div class="hint">Could not search right now. Check the internet and try again.</div>'; });
+  }
+
+  window.addEventListener('resize', function () { if (cur >= 0) { fitSlide(cur); } });
+  window.addEventListener('orientationchange', function () { setTimeout(function () { if (cur >= 0) { fitSlide(cur); } }, 300); });
+
+  /* ---------- start ---------- */
+  document.documentElement.setAttribute('data-theme', S.theme);
+  buildFormatters();
+  setupSettings();
+  tick();
+  loadWeather();
+  loadFeed('news'); loadFeed('cricket'); loadMarkets();
+  if (!DEMO) {
+    setInterval(function () { loadFeed('news'); loadFeed('cricket'); }, 30 * 60 * 1000);
+    setInterval(loadMarkets, 10 * 60 * 1000);
+    setTimeout(function () { location.reload(); }, 6 * 60 * 60 * 1000);
+  }
+})();
+</script>
+</body>
+</html>
